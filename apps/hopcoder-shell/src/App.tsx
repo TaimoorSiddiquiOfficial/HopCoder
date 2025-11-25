@@ -207,7 +207,7 @@ function App() {
     },
     { 
       id: 'ai.reset', 
-      label: 'AI: Reset to Mock Mode', 
+      label: 'AI: Reset to Default (HopCoder AI)', 
       action: () => aiOrchestrator.clearApiKey() 
     },
   ];

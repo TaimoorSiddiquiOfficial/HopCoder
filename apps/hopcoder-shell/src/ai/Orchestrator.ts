@@ -2,6 +2,7 @@ import { AIProvider, ChatMessage, ToolCall } from './types';
 import { MockAIProvider } from './providers/MockProvider';
 import { OpenAIProvider } from './providers/OpenAIProvider';
 import { AzureAgentProvider } from './providers/AzureAgentProvider';
+import { GeminiProvider } from './providers/GeminiProvider';
 import { toolRegistry } from './ToolRegistry';
 import fsTools from '@proto/tools/fs-tools.json';
 
@@ -77,12 +78,16 @@ export class HopAIOrchestrator {
     // In the future, we can load this from config
     const savedKey = localStorage.getItem('hop_openai_key');
     const savedEndpoint = localStorage.getItem('hop_azure_endpoint');
+    const hopCoderKey = import.meta.env.VITE_HOPCODER_AI_KEY;
 
     if (savedEndpoint && savedKey) {
       this.provider = new AzureAgentProvider(savedEndpoint, savedKey);
       this.addSystemMessage(HOPCODER_INSTRUCTIONS);
     } else if (savedKey) {
       this.provider = new OpenAIProvider(savedKey);
+      this.addSystemMessage(HOPCODER_INSTRUCTIONS);
+    } else if (hopCoderKey) {
+      this.provider = new GeminiProvider(hopCoderKey);
       this.addSystemMessage(HOPCODER_INSTRUCTIONS);
     } else {
       this.provider = new MockAIProvider();
@@ -125,9 +130,20 @@ export class HopAIOrchestrator {
   public clearApiKey() {
     localStorage.removeItem('hop_openai_key');
     localStorage.removeItem('hop_azure_endpoint');
-    this.provider = new MockAIProvider();
+    
+    const hopCoderKey = import.meta.env.VITE_HOPCODER_AI_KEY;
+    if (hopCoderKey) {
+        this.provider = new GeminiProvider(hopCoderKey);
+        this.addSystemMessage(HOPCODER_INSTRUCTIONS);
+    } else {
+        this.provider = new MockAIProvider();
+        const toolHelp = fsTools.tools.map(t => `- ${t.name}: ${t.description}`).join('\n      ');
+        this.addSystemMessage(`You are HopCoder AI (Mock Mode).
+        Available commands:
+        ${toolHelp}`);
+    }
+    
     this.history = [];
-    this.addSystemMessage("You are HopCoder AI (Mock Mode).");
     this.notify();
   }
 
@@ -156,7 +172,46 @@ export class HopAIOrchestrator {
     this.history.push(userMsg);
     this.notify();
 
-    await this.processTurn();
+    try {
+      await this.processTurn();
+    } catch (error: any) {
+      console.error('AI Error:', error);
+      
+      // Auto-fallback if Azure fails with 401/403 and we have a default key
+      if (this.provider instanceof AzureAgentProvider && (error.message.includes('401') || error.message.includes('Access denied'))) {
+         const hopCoderKey = import.meta.env.VITE_HOPCODER_AI_KEY;
+         if (hopCoderKey) {
+             this.history.push({ 
+                 role: 'system', 
+                 content: 'Azure Authentication failed. Switching to default HopCoder AI (Gemini)...', 
+                 timestamp: Date.now() 
+             });
+             this.notify();
+             
+             this.clearApiKey(); // This switches to Gemini if key exists
+             
+             // Retry the turn with the new provider
+             // We need to remove the failed assistant message first? 
+             // processTurn adds a new assistant message.
+             // The failed one is already in history.
+             // Let's remove the last message if it was an empty/failed assistant message.
+             const last = this.history[this.history.length - 1];
+             if (last.role === 'assistant' && !last.content && !last.toolCalls) {
+                 this.history.pop();
+             }
+             
+             await this.processTurn();
+             return;
+         }
+      }
+
+      this.history.push({ 
+        role: 'assistant', 
+        content: `\n\n*Error: ${error.message || 'Unknown error occurred'}*`, 
+        timestamp: Date.now() 
+      });
+      this.notify();
+    }
   }
 
   private async processTurn() {
