@@ -1,8 +1,8 @@
 {
 	"nameShort": "HopCoder",
 	"nameLong": "HopCoder",
-	"voidVersion": "1.4.9",
-	"voidRelease": "0044",
+	"hopcoderVersion": "1.4.9",
+	"hopcoderRelease": "0044",
 	"applicationName": "hopcoder",
 	"dataFolderName": ".hopcoder",
 	"win32MutexName": "hopcoder",

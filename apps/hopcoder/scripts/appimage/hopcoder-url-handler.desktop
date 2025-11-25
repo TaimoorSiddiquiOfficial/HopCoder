@@ -1,12 +1,12 @@
 [Desktop Entry]
-Name=Void - URL Handler
+Name=HopCoder - URL Handler
 Comment=Open source AI code editor.
 GenericName=Text Editor
-Exec=void --open-url %U
-Icon=void
+Exec=hopcoder --open-url %U
+Icon=hopcoder
 Type=Application
 NoDisplay=true
 StartupNotify=true
 Categories=Utility;TextEditor;Development;IDE;
-MimeType=x-scheme-handler/void;
-Keywords=void;
+MimeType=x-scheme-handler/hopcoder;
+Keywords=hopcoder;

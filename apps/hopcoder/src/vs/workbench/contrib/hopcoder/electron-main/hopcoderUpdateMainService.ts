@@ -8,11 +8,11 @@ import { IEnvironmentMainService } from '../../../../platform/environment/electr
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { IUpdateService, StateType } from '../../../../platform/update/common/update.js';
 import { IhopcoderUpdateService } from '../common/hopcoderUpdateService.js';
-import { VoidCheckUpdateRespose } from '../common/hopcoderUpdateServiceTypes.js';
+import { HopCoderCheckUpdateResponse } from '../common/hopcoderUpdateServiceTypes.js';
 import { isLinux } from '../../../../base/common/platform.js';
 
 
-export class VoidMainUpdateService extends Disposable implements IhopcoderUpdateService {
+export class HopCoderMainUpdateService extends Disposable implements IhopcoderUpdateService {
 	_serviceBrand: undefined;
 
 	constructor(
@@ -24,7 +24,7 @@ export class VoidMainUpdateService extends Disposable implements IhopcoderUpdate
 	}
 
 
-	async check(explicit: boolean): Promise<VoidCheckUpdateRespose> {
+	async check(explicit: boolean): Promise<HopCoderCheckUpdateResponse> {
 		const isDevMode = !this._envMainService.isBuilt // found in abstractUpdateService.ts
 
 		if (isDevMode) {
@@ -55,13 +55,13 @@ export class VoidMainUpdateService extends Disposable implements IhopcoderUpdate
 
 
 	// linux doesn't support auto-update, so we just check the latest tag on github
-	private async _manualCheckGHTagIfDisabled(explicit: boolean): Promise<VoidCheckUpdateRespose> {
+	private async _manualCheckGHTagIfDisabled(explicit: boolean): Promise<HopCoderCheckUpdateResponse> {
 		try {
 			const response = await fetch('https://api.github.com/repos/TaimoorSiddiquiOfficial/HopCoder/releases/latest');
 			const data = await response.json() as any;
 			const latestVersion = data.tag_name;
 
-			const currentVersion = this._productService.voidVersion;
+			const currentVersion = this._productService.hopcoderVersion;
 
 			if (latestVersion !== currentVersion) {
 				// if (explicit)
