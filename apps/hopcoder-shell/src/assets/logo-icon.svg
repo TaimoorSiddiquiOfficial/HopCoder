@@ -1,0 +1,7 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <rect x="4" y="4" width="56" height="56" rx="12" fill="#050608" stroke="#F5C445" stroke-width="3"/>
+  <!-- Prompt caret ">" -->
+  <path d="M22 24 L32 32 L22 40" fill="none" stroke="#F5C445" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Cursor "_" -->
+  <line x1="34" y1="40" x2="44" y2="40" stroke="#F5C445" stroke-width="3" stroke-linecap="round"/>
+</svg>

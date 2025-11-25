@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-matte-black text-gray-300;
+  }
+  
+  /* Custom Scrollbar for Matte Black Theme */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-matte-black;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-light rounded border border-matte-black;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gold-dim;
+  }
+}
+
+.text-gold-gradient {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-gold to-gold-light;
+}
