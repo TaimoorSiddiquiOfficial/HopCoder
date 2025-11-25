@@ -93,7 +93,10 @@ pub enum HopResponse {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WorkspaceEntry {
     pub path: String,
-    pub kind: String, // "file" or "dir"
+    pub kind: String, // "file", "dir", or "symlink"
+    pub size: Option<u64>,
+    #[serde(rename = "modified_ms")]
+    pub modified_ms: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

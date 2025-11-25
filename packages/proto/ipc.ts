@@ -198,7 +198,9 @@ export interface HopWorkspaceListResponse extends HopBaseResponse {
 
 export interface HopWorkspaceEntry {
   path: string;
-  kind: 'file' | 'dir';
+  kind: 'file' | 'dir' | 'symlink';
+  size?: number;
+  modified_ms?: number;
 }
 
 export interface HopTerminalSpawnResponse extends HopBaseResponse {

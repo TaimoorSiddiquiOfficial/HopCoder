@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { HopEvent, HopWorkspaceListResponse, HopFsReadResponse } from '@proto/ipc';
-import fsTools from '@proto/tools/fs-tools.json';
+import { FolderOpen } from 'lucide-react';
 import { Layout } from './components/Layout';
 import { Sidebar } from './components/Sidebar';
 import { CodeEditor } from './components/Editor';
@@ -26,13 +25,14 @@ function App() {
     setWorkspaceRoot,
     entries,
     isWorkspaceOpen,
-    setIsWorkspaceOpen,
     projectNotes,
     openWorkspace,
     handleNotesChange,
     handleNotesBlur,
     listDir,
-    addWorkspaceFolder
+    addWorkspaceFolder,
+    browseForWorkspace,
+    closeWorkspace
   } = useHopWorkspace();
 
   const {
@@ -60,73 +60,23 @@ function App() {
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
 
-  // Register tools with current workspace root context
+  // Register terminal + memory tools (fs tools registered globally)
   useEffect(() => {
-    const toolImpls: Record<string, (args: any) => Promise<any>> = {
-      'fs.read': async ({ path }) => {
-        const res = await ipc.send<HopFsReadResponse>({ 
-          type: 'fs.read', 
-          path, 
-          root: workspaceRoot || undefined 
-        });
-        if (!res.ok) throw new Error(res.error);
-        return res.content;
-      },
-      'fs.write': async ({ path, content }) => {
-        const res = await ipc.send({ 
-          type: 'fs.write', 
-          path, 
-          content, 
-          root: workspaceRoot || undefined 
-        });
-        if (!res.ok) throw new Error(res.error);
-        return 'Success';
-      },
-      'fs.list': async ({ path }) => {
-        const target = path || workspaceRoot;
-        const res = await ipc.send<HopWorkspaceListResponse>({ type: 'workspace.list', root: target });
-        if (!res.ok) throw new Error(res.error);
-        return res.entries;
-      },
-      'fs.search': async ({ query }) => {
-        const res = await ipc.send<any>({ type: 'fs.search', query, root: workspaceRoot || undefined });
-        if (!res.ok) throw new Error(res.error);
-        return res.matches;
-      },
-      'hop.memory.save': async ({ key, value }) => {
-        if (!workspaceRoot) throw new Error('No workspace open');
-        await hopMemorySaveProject(workspaceRoot, key, value);
-        return 'Saved';
-      },
-      'hop.memory.load_project': async () => {
-        if (!workspaceRoot) throw new Error('No workspace open');
-        return await hopMemoryLoadProject(workspaceRoot);
-      }
-    };
-
-    fsTools.tools.forEach((t) => {
-      if (toolImpls[t.name]) {
-        toolRegistry.register({
-          name: t.name,
-          description: t.description,
-          parameters: t.input_schema,
-          execute: toolImpls[t.name],
-        });
-      }
-    });
-
-    // Register Terminal tool manually
     toolRegistry.register({
-      name: 'terminal_run',
-      description: 'Run a command in the terminal',
-      parameters: { type: 'object', properties: { command: { type: 'string' } } },
-      execute: async ({ command }) => {
-        await ipc.send({ type: 'terminal.write', id: 'default', data: command + '\n' });
-        return 'Command sent to terminal';
+      name: 'terminal.run',
+      description: 'Run a command in the integrated terminal',
+      parameters: { 
+        type: 'object', 
+        required: ['command'],
+        properties: { command: { type: 'string' } } 
+      },
+      execute: async ({ command }: { command: string }) => {
+        const targetId = activeTerminalId || 'default';
+        await ipc.send({ type: 'terminal.write', id: targetId, data: `${command}\n` });
+        return { ok: true, terminalId: targetId };
       }
     });
 
-    // Register Memory tools manually (since they are not in fs-tools.json yet)
     toolRegistry.register({
       name: 'hop.memory.save',
       description: 'Save a key-value pair to project memory',
@@ -138,16 +88,28 @@ function App() {
           value: { type: 'string' } 
         } 
       },
-      execute: toolImpls['hop.memory.save']
+      execute: async ({ key, value }: { key: string; value: unknown }) => {
+        if (!workspaceRoot) {
+          throw new Error('No workspace is open.');
+        }
+        const id = await hopMemorySaveProject(workspaceRoot, key, value);
+        return { ok: true, id };
+      }
     });
 
     toolRegistry.register({
       name: 'hop.memory.load_project',
-      description: 'Load all project memory',
+      description: 'Load project memory items',
       parameters: { type: 'object', properties: {} },
-      execute: toolImpls['hop.memory.load_project']
+      execute: async () => {
+        if (!workspaceRoot) {
+          throw new Error('No workspace is open.');
+        }
+        const items = await hopMemoryLoadProject(workspaceRoot);
+        return { ok: true, items };
+      }
     });
-  }, [workspaceRoot]);
+  }, [workspaceRoot, activeTerminalId]);
 
   // Auto-spawn first terminal
   useEffect(() => {
@@ -176,7 +138,7 @@ function App() {
 
   const commands = [
     { id: 'save', label: 'File: Save', action: () => saveFile(), shortcut: 'Ctrl+S' },
-    { id: 'open', label: 'File: Open Workspace...', action: () => setIsWorkspaceOpen(false) },
+    { id: 'open', label: 'File: Open Workspace...', action: () => closeWorkspace() },
     { id: 'add_folder', label: 'File: Add Folder to Workspace...', action: () => {
       const path = window.prompt('Enter folder path:');
       if (path) addWorkspaceFolder(path);
@@ -217,7 +179,7 @@ function App() {
       label: 'File',
       children: [
         { label: 'New File', action: () => alert('Not implemented') },
-        { label: 'Open Workspace...', action: () => setIsWorkspaceOpen(false) },
+        { label: 'Open Workspace...', action: () => closeWorkspace() },
         { label: 'Add Folder to Workspace...', action: () => {
           const path = window.prompt('Enter folder path:');
           if (path) addWorkspaceFolder(path);
@@ -275,33 +237,58 @@ function App() {
   ];
 
 
+  const handleApplyCode = (code: string) => {
+    if (activeFilePath) {
+      updateFileContent(activeFilePath, code);
+    }
+  };
+
+  const handleRunCommand = (command: string) => {
+    // Ensure command ends with newline
+    const cmd = command.endsWith('\n') ? command : `${command}\n`;
+    writeToTerminal(cmd);
+  };
+
   // Simple "Welcome / Open" screen if no workspace
   if (!isWorkspaceOpen) {
     return (
-      <div className="h-screen w-screen bg-[#1e1e1e] text-white flex flex-col items-center justify-center">
-        <img src={logoFull} alt="HopCoder" className="h-24 mb-8" />
-        <div className="flex gap-2">
-          <input
-            className="bg-[#252526] border border-[#333] px-4 py-2 rounded text-white w-64 outline-none focus:border-blue-500"
-            placeholder="Path to workspace..."
-            value={workspaceRoot}
-            onChange={(e) => setWorkspaceRoot(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && openWorkspace(workspaceRoot)}
-          />
-          <button
-            className="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded font-medium transition-colors"
-            onClick={() => openWorkspace(workspaceRoot || '.')}
-          >
-            Open
-          </button>
+      <div className="h-screen w-screen bg-matte-black text-gold flex flex-col items-center justify-center">
+        <img src={logoFull} alt="HopCoder" className="h-32 mb-8 opacity-90" />
+        <div className="flex flex-col gap-4 w-96">
+          <div className="flex gap-2">
+            <input
+              className="bg-surface border border-gold-dim/30 px-4 py-2 rounded text-gold-light w-full outline-none focus:border-gold placeholder-gold-dim/50"
+              placeholder="Path to workspace..."
+              value={workspaceRoot}
+              onChange={(e) => setWorkspaceRoot(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && openWorkspace(workspaceRoot)}
+            />
+          </div>
+          
+          <div className="flex gap-2 justify-center">
+            <button
+              className="flex items-center gap-2 bg-surface-light hover:bg-surface border border-gold-dim/30 hover:border-gold text-gold px-6 py-2 rounded font-medium transition-all duration-200"
+              onClick={browseForWorkspace}
+            >
+              <FolderOpen size={18} />
+              Browse System
+            </button>
+            
+            <button
+              className="bg-gold hover:bg-gold-light text-matte-black px-8 py-2 rounded font-bold transition-colors shadow-lg shadow-gold/10"
+              onClick={() => openWorkspace(workspaceRoot || '.')}
+            >
+              Open
+            </button>
+          </div>
         </div>
-        <p className="mt-4 text-gray-500 text-sm">Enter a path or use '.' for current directory</p>
+        <p className="mt-8 text-gold-dim text-sm opacity-60">HopCoder AI Native IDE</p>
       </div>
     );
   }
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden">
+    <div className="h-screen w-screen flex flex-col bg-matte-black text-gray-300 overflow-hidden font-sans selection:bg-gold-dim/30">
       <MenuBar menus={menuItems} logo={logoIcon} />
       <div className="flex-1 overflow-hidden">
         <Layout
@@ -336,7 +323,16 @@ function App() {
               onInput={writeToTerminal}
             />
           }
-          rightPanel={isChatOpen ? <ChatPanel /> : undefined}
+          rightPanel={
+            isChatOpen ? (
+              <ChatPanel 
+                onApplyCode={handleApplyCode}
+                onRunCommand={handleRunCommand}
+                activeFilePath={activeFilePath}
+                activeFileContent={tabs.find(t => t.path === activeFilePath)?.content}
+              />
+            ) : undefined
+          }
         />
       </div>
       <CommandPalette

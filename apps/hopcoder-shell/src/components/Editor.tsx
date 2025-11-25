@@ -59,23 +59,23 @@ export function CodeEditor({ tabs, activeFilePath, rootPath, onTabClick, onTabCl
   };
 
   return (
-    <div className="h-full w-full bg-[#1e1e1e] flex flex-col">
+    <div className="h-full w-full bg-surface flex flex-col">
       {/* Tab Bar */}
-      <div className="flex bg-[#252526] overflow-x-auto border-b border-[#333]">
+      <div className="flex bg-surface-light overflow-x-auto border-b border-surface-light">
         {tabs.map(tab => (
           <div
             key={tab.path}
             className={`
-              group flex items-center gap-2 px-3 py-2 text-sm cursor-pointer border-r border-[#333] min-w-[120px] max-w-[200px]
-              ${tab.path === activeFilePath ? 'bg-[#1e1e1e] text-white border-t-2 border-t-blue-500' : 'text-gray-400 hover:bg-[#2a2d2e]'}
+              group flex items-center gap-2 px-3 py-2 text-sm cursor-pointer border-r border-surface-light min-w-[120px] max-w-[200px]
+              ${tab.path === activeFilePath ? 'bg-surface text-gold-light border-t-2 border-t-gold' : 'text-gray-400 hover:bg-surface hover:text-gold-dim'}
             `}
             onClick={() => onTabClick(tab.path)}
           >
             <span className="truncate flex-1">{getFileName(tab.path)}</span>
-            {tab.isDirty && <div className="w-2 h-2 rounded-full bg-white group-hover:hidden" />}
+            {tab.isDirty && <div className="w-2 h-2 rounded-full bg-gold group-hover:hidden" />}
             <X
               size={14}
-              className={`opacity-0 group-hover:opacity-100 hover:bg-[#444] rounded p-0.5 ${tab.isDirty ? 'block' : ''}`}
+              className={`opacity-0 group-hover:opacity-100 hover:bg-surface-light rounded p-0.5 text-gold-dim hover:text-gold ${tab.isDirty ? 'block' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onTabClose(tab.path);

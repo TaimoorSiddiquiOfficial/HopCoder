@@ -1,7 +1,9 @@
 import { useState, useCallback } from 'react';
-import { HopWorkspaceListResponse, WorkspaceEntry } from '@proto/ipc';
+import { open } from '@tauri-apps/api/dialog';
+import { HopWorkspaceListResponse, HopWorkspaceEntry } from '@proto/ipc';
 import { hopMemoryLoadProject, hopMemorySaveProject } from '../lib/hopMemory';
 import { ipc } from '../lib/ipc';
+import { setFsToolsWorkspaceRoot } from '../ai/registerFsTools';
 
 // Simple debounce utility
 function debounce<T extends (...args: any[]) => void>(func: T, wait: number) {
@@ -15,7 +17,7 @@ function debounce<T extends (...args: any[]) => void>(func: T, wait: number) {
 export function useHopWorkspace() {
   const [workspaceRoot, setWorkspaceRoot] = useState<string>('');
   const [workspaceFolders, setWorkspaceFolders] = useState<string[]>([]);
-  const [entries, setEntries] = useState<WorkspaceEntry[]>([]);
+  const [entries, setEntries] = useState<HopWorkspaceEntry[]>([]);
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
   const [projectNotes, setProjectNotes] = useState('');
 
@@ -27,7 +29,7 @@ export function useHopWorkspace() {
     []
   );
 
-  const loadWorkspaceFolder = async (root: string): Promise<WorkspaceEntry[]> => {
+  const loadWorkspaceFolder = async (root: string): Promise<HopWorkspaceEntry[]> => {
     const resp = await ipc.send<HopWorkspaceListResponse>({ type: 'workspace.list', root });
     if (resp.ok && resp.entries) {
       return resp.entries;
@@ -59,10 +61,27 @@ export function useHopWorkspace() {
 
     setProjectNotes(loadedNotes);
     setWorkspaceRoot(root);
+    setFsToolsWorkspaceRoot(root);
     setWorkspaceFolders([root]);
     setEntries(folderEntries);
     setIsWorkspaceOpen(true);
     ipc.send({ type: 'workspace.open', root });
+  };
+
+  const browseForWorkspace = async () => {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: 'Select Workspace Folder'
+      });
+      
+      if (selected && typeof selected === 'string') {
+        await openWorkspace(selected);
+      }
+    } catch (err) {
+      console.error('Failed to browse for workspace', err);
+    }
   };
 
   const addWorkspaceFolder = async (path: string) => {
@@ -78,7 +97,7 @@ export function useHopWorkspace() {
     // But Sidebar expects a flat list of top-level items
     // If we have multiple roots, we should probably wrap them in "Folder" entries
     
-    const rootEntry: WorkspaceEntry = {
+    const rootEntry: HopWorkspaceEntry = {
       path: path,
       kind: 'dir'
     };
@@ -107,6 +126,15 @@ export function useHopWorkspace() {
     return [];
   };
 
+  const closeWorkspace = () => {
+    setIsWorkspaceOpen(false);
+    setEntries([]);
+    setWorkspaceFolders([]);
+    setWorkspaceRoot('');
+    setProjectNotes('');
+    setFsToolsWorkspaceRoot(null);
+  };
+
   return {
     workspaceRoot,
     setWorkspaceRoot,
@@ -119,6 +147,8 @@ export function useHopWorkspace() {
     handleNotesBlur,
     listDir,
     addWorkspaceFolder,
-    workspaceFolders
+    browseForWorkspace,
+    workspaceFolders,
+    closeWorkspace
   };
 }

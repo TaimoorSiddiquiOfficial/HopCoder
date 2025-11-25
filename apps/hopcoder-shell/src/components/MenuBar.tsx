@@ -27,13 +27,13 @@ export function MenuBar({ menus, logo }: MenuBarProps) {
   }, []);
 
   return (
-    <div className="h-8 bg-[#3c3c3c] flex items-center px-2 text-xs select-none" ref={menuRef}>
-      {logo && <img src={logo} alt="Logo" className="h-5 w-5 mr-3 ml-1" />}
+    <div className="h-8 bg-surface-light flex items-center px-2 text-xs select-none border-b border-surface" ref={menuRef}>
+      {logo && <img src={logo} alt="Logo" className="h-5 w-5 mr-3 ml-1 opacity-80" />}
       {menus.map((menu, index) => (
         <div key={index} className="relative">
           <div
-            className={`px-3 py-1 rounded cursor-pointer hover:bg-[#505050] ${
-              activeMenu === index ? 'bg-[#505050] text-white' : 'text-[#cccccc]'
+            className={`px-3 py-1 rounded cursor-pointer hover:bg-surface transition-colors ${
+              activeMenu === index ? 'bg-surface text-gold' : 'text-gold-dim'
             }`}
             onClick={() => setActiveMenu(activeMenu === index ? null : index)}
             onMouseEnter={() => activeMenu !== null && setActiveMenu(index)}
@@ -41,11 +41,11 @@ export function MenuBar({ menus, logo }: MenuBarProps) {
             {menu.label}
           </div>
           {activeMenu === index && menu.children && (
-            <div className="absolute top-full left-0 bg-[#252526] border border-[#454545] shadow-lg min-w-[200px] z-50 py-1">
+            <div className="absolute top-full left-0 bg-surface-light border border-gold-dim/20 shadow-xl min-w-[200px] z-50 py-1 rounded-b-md">
               {menu.children.map((item, itemIndex) => (
                 <div
                   key={itemIndex}
-                  className="px-4 py-1.5 hover:bg-[#094771] hover:text-white cursor-pointer flex justify-between items-center text-[#cccccc]"
+                  className="px-4 py-1.5 hover:bg-surface hover:text-gold cursor-pointer flex justify-between items-center text-gold-dim transition-colors"
                   onClick={() => {
                     item.action?.();
                     setActiveMenu(null);

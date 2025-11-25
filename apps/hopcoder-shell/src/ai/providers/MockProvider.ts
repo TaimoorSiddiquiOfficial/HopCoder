@@ -36,7 +36,7 @@ export class MockAIProvider implements AIProvider {
       const runMatch = text.match(/^run\s+(.+)$/i);
       if (runMatch) {
         onChunk(`Running command: ${runMatch[1]}...\n`);
-        onToolCall({ id: 'call_' + Date.now(), name: 'terminal_run', arguments: { command: runMatch[1] } });
+        onToolCall({ id: 'call_' + Date.now(), name: 'terminal.run', arguments: { command: runMatch[1] } });
         return;
       }
       

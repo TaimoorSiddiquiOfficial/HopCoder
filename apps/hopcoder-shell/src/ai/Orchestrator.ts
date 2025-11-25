@@ -21,6 +21,17 @@ CORE PURPOSE
 - Orchestrate tools (filesystem, search, memory, git/tests/terminal when available) to perform real actions, while keeping the user in control.
 - Maintain project and session memory so behavior stays consistent with project conventions and earlier decisions.
 
+SHELL & CLI EXPERTISE (Copilot CLI Style)
+- You are an expert in shell scripting (Bash, PowerShell, Zsh).
+- When asked to generate shell commands:
+  - Provide the command in a code block (e.g., \`\`\`bash ... \`\`\`).
+  - Explain what the command does, breaking down complex flags.
+  - If the command is risky (e.g., \`rm -rf\`), warn the user explicitly.
+  - Prefer cross-platform commands where possible, or specify if a command is OS-specific.
+- When asked to explain a command:
+  - Break it down token by token or flag by flag.
+  - Explain the side effects.
+
 GENERAL BEHAVIOR
 - Prefer tools over speculation: if you can read/search the project, do that.
 - Before large changes, propose a concrete plan (steps) and mention which tools you will use.
@@ -75,6 +86,16 @@ export class HopAIOrchestrator {
   private listeners: ((history: ChatMessage[]) => void)[] = [];
 
   constructor() {
+    // Load history from localStorage
+    try {
+      const savedHistory = localStorage.getItem('hop_chat_history');
+      if (savedHistory) {
+        this.history = JSON.parse(savedHistory);
+      }
+    } catch (e) {
+      console.error('Failed to load chat history', e);
+    }
+
     // In the future, we can load this from config
     const savedKey = localStorage.getItem('hop_openai_key');
     const savedEndpoint = localStorage.getItem('hop_azure_endpoint');
@@ -95,17 +116,55 @@ export class HopAIOrchestrator {
       // Dynamically build help message from tools
       const toolHelp = fsTools.tools.map(t => `- ${t.name}: ${t.description}`).join('\n      ');
       
-      this.addSystemMessage(`You are HopCoder AI.
-      Available commands (Mock Mode):
-      ${toolHelp}
-      - terminal_run: Run a command in the terminal
-      
-      Usage:
-      - read <path> (maps to fs.read)
-      - list <path> (maps to fs.list)
-      - run <command> (maps to terminal_run)
-      - write <path> <content> (maps to fs.write)
-      `);
+      // Only add system message if history is empty (fresh start)
+      if (this.history.length === 0) {
+        this.addSystemMessage(`You are HopCoder AI.
+        Available commands (Mock Mode):
+        ${toolHelp}
+        - terminal.run: Run a command in the terminal
+        
+        Usage:
+        - read <path> (maps to fs.read)
+        - list <path> (maps to fs.list)
+        - run <command> (maps to terminal.run)
+        - write <path> <content> (maps to fs.write)
+        `);
+      }
+    }
+  }
+
+  private saveHistory() {
+    try {
+      localStorage.setItem('hop_chat_history', JSON.stringify(this.history));
+    } catch (e) {
+      console.error('Failed to save chat history', e);
+    }
+  }
+
+  public clearHistory() {
+    this.history = [];
+    this.saveHistory();
+    this.notifyListeners();
+    
+    // Re-initialize system message
+    const savedKey = localStorage.getItem('hop_openai_key');
+    const savedEndpoint = localStorage.getItem('hop_azure_endpoint');
+    const hopCoderKey = import.meta.env.VITE_HOPCODER_AI_KEY;
+
+    if (savedEndpoint && savedKey) {
+       this.addSystemMessage(HOPCODER_INSTRUCTIONS);
+    } else if (savedKey) {
+       this.addSystemMessage(HOPCODER_INSTRUCTIONS);
+    } else if (hopCoderKey) {
+       this.addSystemMessage(HOPCODER_INSTRUCTIONS);
+    } else {
+       // Mock mode re-init
+       const toolHelp = fsTools.tools.map(t => `- ${t.name}: ${t.description}`).join('\n      ');
+       this.addSystemMessage(`You are HopCoder AI.
+       Available commands (Mock Mode):
+       ${toolHelp}
+       
+       I can help you navigate your workspace, read files, and answer questions about your code.`);
     }
   }
 
@@ -114,6 +173,7 @@ export class HopAIOrchestrator {
     localStorage.setItem('hop_openai_key', apiKey);
     this.provider = new AzureAgentProvider(endpoint, apiKey);
     this.history = []; // Reset history
+    this.saveHistory();
     this.addSystemMessage(HOPCODER_INSTRUCTIONS);
     this.notify();
   }
@@ -123,6 +183,7 @@ export class HopAIOrchestrator {
     localStorage.removeItem('hop_azure_endpoint'); // Clear azure endpoint if switching to standard OpenAI
     this.provider = new OpenAIProvider(key);
     this.history = [];
+    this.saveHistory();
     this.addSystemMessage("You are HopCoder AI, connected to OpenAI.");
     this.notify();
   }
@@ -144,6 +205,7 @@ export class HopAIOrchestrator {
     }
     
     this.history = [];
+    this.saveHistory();
     this.notify();
   }
 
@@ -153,17 +215,28 @@ export class HopAIOrchestrator {
 
   public subscribe(listener: (history: ChatMessage[]) => void) {
     this.listeners.push(listener);
+    listener(this.history);
     return () => {
       this.listeners = this.listeners.filter((l) => l !== listener);
     };
   }
 
+  private notifyListeners() {
+    this.listeners.forEach((l) => l(this.history));
+  }
+
   private notify() {
-    this.listeners.forEach((l) => l(this.getHistory()));
+    this.notifyListeners();
   }
 
   private addSystemMessage(content: string) {
-    this.history.push({ role: 'system', content, timestamp: Date.now() });
+    // Only add if not already present at the start
+    if (this.history.length > 0 && this.history[0].role === 'system') {
+        this.history[0] = { role: 'system', content, timestamp: Date.now() };
+    } else {
+        this.history.unshift({ role: 'system', content, timestamp: Date.now() });
+    }
+    this.saveHistory();
   }
 
   public async sendMessage(content: string) {
@@ -171,6 +244,7 @@ export class HopAIOrchestrator {
     const userMsg: ChatMessage = { role: 'user', content, timestamp: Date.now() };
     this.history.push(userMsg);
     this.notify();
+    this.saveHistory();
 
     try {
       await this.processTurn();
@@ -187,14 +261,11 @@ export class HopAIOrchestrator {
                  timestamp: Date.now() 
              });
              this.notify();
+             this.saveHistory();
              
              this.clearApiKey(); // This switches to Gemini if key exists
              
              // Retry the turn with the new provider
-             // We need to remove the failed assistant message first? 
-             // processTurn adds a new assistant message.
-             // The failed one is already in history.
-             // Let's remove the last message if it was an empty/failed assistant message.
              const last = this.history[this.history.length - 1];
              if (last.role === 'assistant' && !last.content && !last.toolCalls) {
                  this.history.pop();
@@ -211,6 +282,7 @@ export class HopAIOrchestrator {
         timestamp: Date.now() 
       });
       this.notify();
+      this.saveHistory();
     }
   }
 
@@ -219,6 +291,7 @@ export class HopAIOrchestrator {
     const assistantMsg: ChatMessage = { role: 'assistant', content: '', timestamp: Date.now() };
     this.history.push(assistantMsg);
     this.notify();
+    this.saveHistory();
 
     let currentToolCall: ToolCall | null = null;
 
@@ -228,14 +301,19 @@ export class HopAIOrchestrator {
       (chunk) => {
         assistantMsg.content += chunk;
         this.notify();
+        // Don't save history on every chunk, too expensive
       },
       (toolCall) => {
         currentToolCall = toolCall;
         assistantMsg.toolCalls = assistantMsg.toolCalls || [];
         assistantMsg.toolCalls.push(toolCall);
         this.notify();
+        this.saveHistory();
       }
     );
+    
+    // Save final message content
+    this.saveHistory();
 
     // If tool was called, execute it and recurse
     if (currentToolCall) {
@@ -255,6 +333,7 @@ export class HopAIOrchestrator {
         timestamp: Date.now()
       });
       this.notify();
+      this.saveHistory();
 
       // Let AI respond to the tool result
       await this.processTurn();
@@ -267,6 +346,7 @@ export class HopAIOrchestrator {
         timestamp: Date.now()
       });
       this.notify();
+      this.saveHistory();
     }
   }
 }

@@ -1,15 +1,11 @@
 import React, { useState } from 'react';
 import { Folder, FolderOpen, FileCode, File, ChevronRight, ChevronDown, Loader2 } from 'lucide-react';
-
-export interface WorkspaceEntry {
-  path: string;
-  kind: 'file' | 'dir';
-}
+import type { HopWorkspaceEntry } from '@proto/ipc';
 
 interface SidebarProps {
-  entries: WorkspaceEntry[];
+  entries: HopWorkspaceEntry[];
   onFileSelect: (path: string) => void;
-  onLoadChildren: (path: string) => Promise<WorkspaceEntry[]>;
+  onLoadChildren: (path: string) => Promise<HopWorkspaceEntry[]>;
   workspaceRoot: string;
   notes?: string;
   onSaveNotes?: (notes: string) => void;
@@ -23,14 +19,14 @@ const FileTreeNode = ({
   onLoadChildren, 
   workspaceRoot 
 }: { 
-  entry: WorkspaceEntry; 
+  entry: HopWorkspaceEntry; 
   depth: number; 
   onSelect: (path: string) => void; 
-  onLoadChildren: (path: string) => Promise<WorkspaceEntry[]>;
+  onLoadChildren: (path: string) => Promise<HopWorkspaceEntry[]>;
   workspaceRoot: string;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [children, setChildren] = useState<WorkspaceEntry[]>([]);
+  const [children, setChildren] = useState<HopWorkspaceEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
 
@@ -73,21 +69,21 @@ const FileTreeNode = ({
   return (
     <div>
       <div
-        className={`flex items-center gap-1 py-1 hover:bg-[#2a2d2e] cursor-pointer text-sm select-none ${isOpen ? 'text-white' : 'text-gray-400'}`}
+        className={`flex items-center gap-1 py-1 hover:bg-surface-light cursor-pointer text-sm select-none ${isOpen ? 'text-gold-light' : 'text-gray-400'}`}
         style={{ paddingLeft }}
         onClick={handleToggle}
       >
         <span className="opacity-70 w-4 flex justify-center">
           {entry.kind === 'dir' && (
-            isLoading ? <Loader2 size={12} className="animate-spin" /> :
-            isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />
+            isLoading ? <Loader2 size={12} className="animate-spin text-gold" /> :
+            isOpen ? <ChevronDown size={14} className="text-gold" /> : <ChevronRight size={14} className="text-gold-dim" />
           )}
         </span>
         
         {entry.kind === 'dir' ? (
-          isOpen ? <FolderOpen size={14} className="text-blue-400" /> : <Folder size={14} className="text-blue-400" />
+          isOpen ? <FolderOpen size={14} className="text-gold" /> : <Folder size={14} className="text-gold-dim" />
         ) : (
-          <FileCode size={14} className="text-yellow-400" />
+          <FileCode size={14} className="text-gold-light opacity-80" />
         )}
         <span className="truncate">{getDisplayName(entry.path)}</span>
       </div>

@@ -9,22 +9,11 @@ interface LayoutProps {
 
 export function Layout({ sidebar, editor, bottomPanel, rightPanel }: LayoutProps) {
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#1e1e1e] text-white overflow-hidden">
-      {/* Header / Menu Bar Placeholder */}
-      <div className="h-8 bg-[#3c3c3c] flex items-center px-4 text-xs select-none">
-        <span className="mr-4">File</span>
-        <span className="mr-4">Edit</span>
-        <span className="mr-4">View</span>
-        <span className="mr-4">Go</span>
-        <span className="mr-4">Run</span>
-        <span className="mr-4">Terminal</span>
-        <span className="mr-4">Help</span>
-      </div>
-
+    <div className="h-full w-full flex flex-col bg-matte-black text-gray-300 overflow-hidden">
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
-        <div className="w-64 flex-shrink-0">
+        <div className="w-64 flex-shrink-0 bg-surface-light border-r border-surface">
           {sidebar}
         </div>
 
@@ -35,14 +24,14 @@ export function Layout({ sidebar, editor, bottomPanel, rightPanel }: LayoutProps
           </div>
           
           {/* Bottom Panel (Terminal) */}
-          <div className="h-48 flex-shrink-0">
+          <div className="h-48 flex-shrink-0 border-t border-surface">
             {bottomPanel}
           </div>
         </div>
 
         {/* Right Panel (Chat) */}
         {rightPanel && (
-          <div className="flex-shrink-0">
+          <div className="flex-shrink-0 border-l border-surface">
             {rightPanel}
           </div>
         )}
