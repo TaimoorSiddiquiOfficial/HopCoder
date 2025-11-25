@@ -127,50 +127,67 @@ export class GeminiProvider implements AIProvider {
 
       buffer += decoder.decode(value, { stream: true });
       
-      let startIndex = 0;
-      let braceCount = 0;
-      let inString = false;
-      let escaped = false;
+      // Process all complete JSON objects in the buffer
+      buffer = this.parseJsonStream(buffer, onChunk, onToolCall);
+    }
+    
+    // Process any remaining complete JSON in buffer
+    if (buffer.trim()) {
+      this.parseJsonStream(buffer, onChunk, onToolCall);
+    }
+  }
+  
+  private parseJsonStream(
+    buffer: string, 
+    onChunk: (c: string) => void, 
+    onToolCall?: (tc: ToolCall) => void
+  ): string {
+    let startIndex = 0;
+    let braceCount = 0;
+    let inString = false;
+    let escaped = false;
+    let lastEndIndex = 0;
+    
+    for (let i = 0; i < buffer.length; i++) {
+      const char = buffer[i];
       
-      for (let i = 0; i < buffer.length; i++) {
-        const char = buffer[i];
-        
-        if (escaped) {
-            escaped = false;
-            continue;
-        }
-        
-        if (char === '\\') {
-            escaped = true;
-            continue;
-        }
-        
-        if (char === '"') {
-            inString = !inString;
-            continue;
-        }
-        
-        if (!inString) {
-            if (char === '{') {
-                if (braceCount === 0) startIndex = i;
-                braceCount++;
-            } else if (char === '}') {
-                braceCount--;
-                if (braceCount === 0) {
-                    const jsonStr = buffer.substring(startIndex, i + 1);
-                    try {
-                        const chunk = JSON.parse(jsonStr);
-                        this.processChunk(chunk, onChunk, onToolCall);
-                    } catch (e) {
-                        console.error('Failed to parse chunk', e);
-                    }
-                    buffer = buffer.substring(i + 1);
-                    i = -1;
-                }
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+      
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      
+      if (!inString) {
+        if (char === '{') {
+          if (braceCount === 0) startIndex = i;
+          braceCount++;
+        } else if (char === '}') {
+          braceCount--;
+          if (braceCount === 0) {
+            const jsonStr = buffer.substring(startIndex, i + 1);
+            try {
+              const chunk = JSON.parse(jsonStr);
+              this.processChunk(chunk, onChunk, onToolCall);
+            } catch (e) {
+              console.error('Failed to parse chunk', e);
             }
+            lastEndIndex = i + 1;
+          }
         }
       }
     }
+    
+    // Return unprocessed portion of buffer
+    return buffer.substring(lastEndIndex);
   }
 
   private processChunk(chunk: any, onChunk: (c: string) => void, onToolCall?: (tc: ToolCall) => void) {

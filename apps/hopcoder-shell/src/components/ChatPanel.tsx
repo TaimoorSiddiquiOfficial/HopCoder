@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { Send, Trash2, Bot, User, Copy, Check, Terminal, Code2, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -73,8 +73,11 @@ export function ChatPanel({ onApplyCode, onRunCommand, activeFilePath, activeFil
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
-  // Filter out system messages for display
-  const displayMessages = messages.filter((m) => m.role !== 'system');
+  // Filter out system messages for display - memoized to prevent recalculation
+  const displayMessages = useMemo(
+    () => messages.filter((m) => m.role !== 'system'),
+    [messages]
+  );
 
   return (
     <div className="h-full flex flex-col bg-surface border-l border-surface-light text-gray-300 w-96 shadow-2xl">
@@ -131,8 +134,9 @@ export function ChatPanel({ onApplyCode, onRunCommand, activeFilePath, activeFil
                     components={{
                       code({ node, inline, className, children, ...props }: any) {
                         const match = /language-(\w+)/.exec(className || '');
-                        const codeId = `code-${idx}-${Math.random().toString(36).substr(2, 9)}`;
                         const codeString = String(children).replace(/\n$/, '');
+                        // Use a stable ID based on message index and code content hash
+                        const codeId = `code-${idx}-${codeString.slice(0, 50).replace(/\W/g, '')}`;
                         const isShell = match && ['bash', 'sh', 'zsh', 'powershell', 'cmd'].includes(match[1]);
 
                         return !inline && match ? (

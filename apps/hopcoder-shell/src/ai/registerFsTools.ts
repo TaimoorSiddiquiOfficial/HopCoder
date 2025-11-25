@@ -77,19 +77,28 @@ function truncateUtf8(text: string, maxBytes: number): { text: string; truncated
   if (maxBytes <= 0) {
     return { text: '', truncated: text.length > 0 };
   }
-  let bytes = 0;
-  let output = '';
-  let truncated = false;
-  for (const char of text) {
-    const charBytes = utf8Encoder.encode(char).length;
-    if (bytes + charBytes > maxBytes) {
-      truncated = true;
-      break;
-    }
-    output += char;
-    bytes += charBytes;
+  
+  // Fast path: if the entire text fits, return it directly
+  const encoded = utf8Encoder.encode(text);
+  if (encoded.length <= maxBytes) {
+    return { text, truncated: false };
   }
-  return { text: output, truncated };
+  
+  // Binary search for the correct truncation point to avoid encoding each character
+  let low = 0;
+  let high = text.length;
+  
+  while (low < high) {
+    const mid = Math.floor((low + high + 1) / 2);
+    const slice = text.slice(0, mid);
+    if (utf8Encoder.encode(slice).length <= maxBytes) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+  
+  return { text: text.slice(0, low), truncated: true };
 }
 
 function isHiddenPath(relPath: string): boolean {

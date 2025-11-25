@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Search } from 'lucide-react';
 
 interface Command {
@@ -19,9 +19,13 @@ export function CommandPalette({ isOpen, onClose, commands }: CommandPaletteProp
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const filteredCommands = commands.filter((cmd) =>
-    cmd.label.toLowerCase().includes(query.toLowerCase())
-  );
+  // Memoize filtered commands to prevent recalculation on every render
+  const filteredCommands = useMemo(() => {
+    const lowerQuery = query.toLowerCase();
+    return commands.filter((cmd) =>
+      cmd.label.toLowerCase().includes(lowerQuery)
+    );
+  }, [commands, query]);
 
   useEffect(() => {
     if (isOpen) {

@@ -13,8 +13,10 @@ export function useTerminal() {
   const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
 
   useEffect(() => {
-    const subscribe = async () =>
-      ipc.onEvent((evt: HopEvent) => {
+    let unlistenFn: (() => void) | undefined;
+    
+    const subscribe = async () => {
+      unlistenFn = await ipc.onEvent((evt: HopEvent) => {
         if (evt.type === 'terminal.data') {
           setTerminals(prev => prev.map(t => {
             if (t.id === evt.id) {
@@ -24,7 +26,15 @@ export function useTerminal() {
           }));
         }
       });
+    };
     subscribe();
+    
+    // Cleanup: unsubscribe from events when component unmounts
+    return () => {
+      if (unlistenFn) {
+        unlistenFn();
+      }
+    };
   }, []);
 
   const createTerminal = async () => {

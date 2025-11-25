@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, memo } from 'react';
 import { Folder, FolderOpen, FileCode, File, ChevronRight, ChevronDown, Loader2 } from 'lucide-react';
 import type { HopWorkspaceEntry } from '@proto/ipc';
 
@@ -112,11 +112,13 @@ const FileTreeNode = ({
 };
 
 export function Sidebar({ entries, onFileSelect, onLoadChildren, workspaceRoot, notes, onSaveNotes, onNotesBlur }: SidebarProps) {
-  // Sort root entries
-  const sortedEntries = [...entries].sort((a, b) => {
-    if (a.kind === b.kind) return a.path.localeCompare(b.path);
-    return a.kind === 'dir' ? -1 : 1;
-  });
+  // Memoize sorted entries to prevent re-sorting on every render
+  const sortedEntries = useMemo(() => {
+    return [...entries].sort((a, b) => {
+      if (a.kind === b.kind) return a.path.localeCompare(b.path);
+      return a.kind === 'dir' ? -1 : 1;
+    });
+  }, [entries]);
 
   return (
     <div className="h-full bg-[#1e1e1e] text-gray-300 flex flex-col border-r border-[#333]">
