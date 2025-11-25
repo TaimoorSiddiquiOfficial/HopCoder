@@ -38,9 +38,11 @@ pub struct HopNotificationMessage {
 #[serde(tag = "type")]
 pub enum HopRequest {
     #[serde(rename = "fs.read")]
-    FsRead { path: String },
+    FsRead { path: String, root: Option<String> },
     #[serde(rename = "fs.write")]
-    FsWrite { path: String, content: String },
+    FsWrite { path: String, content: String, root: Option<String> },
+    #[serde(rename = "fs.delete")]
+    FsDelete { path: String, root: Option<String> },
     #[serde(rename = "workspace.open")]
     WorkspaceOpen { root: String },
     #[serde(rename = "workspace.list")]
@@ -64,6 +66,8 @@ pub enum HopResponse {
     FsRead { ok: bool, content: Option<String>, error: Option<String> },
     #[serde(rename = "fs.write")]
     FsWrite { ok: bool, error: Option<String> },
+    #[serde(rename = "fs.delete")]
+    FsDelete { ok: bool, error: Option<String> },
     #[serde(rename = "workspace.open")]
     WorkspaceOpen { ok: bool, #[serde(rename = "workspaceRoot")] workspace_root: Option<String>, error: Option<String> },
     #[serde(rename = "workspace.list")]

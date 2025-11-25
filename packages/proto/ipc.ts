@@ -45,6 +45,7 @@ export interface HopNotificationMessage extends HopBaseMessage {
 export type HopRequest =
   | HopFsReadRequest
   | HopFsWriteRequest
+  | HopFsDeleteRequest
   | HopWorkspaceOpenRequest
   | HopWorkspaceListRequest
   | HopTerminalSpawnRequest
@@ -56,12 +57,20 @@ export type HopRequest =
 export interface HopFsReadRequest {
   type: 'fs.read';
   path: string;
+  root?: string;
 }
 
 export interface HopFsWriteRequest {
   type: 'fs.write';
   path: string;
   content: string;
+  root?: string;
+}
+
+export interface HopFsDeleteRequest {
+  type: 'fs.delete';
+  path: string;
+  root?: string;
 }
 
 export interface HopWorkspaceOpenRequest {
@@ -146,6 +155,12 @@ export interface HopFsReadResponse extends HopBaseResponse {
 
 export interface HopFsWriteResponse extends HopBaseResponse {
   type: 'fs.write';
+  ok: boolean;
+  error?: string;
+}
+
+export interface HopFsDeleteResponse extends HopBaseResponse {
+  type: 'fs.delete';
   ok: boolean;
   error?: string;
 }

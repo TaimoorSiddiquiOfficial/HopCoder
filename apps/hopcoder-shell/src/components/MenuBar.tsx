@@ -9,9 +9,10 @@ export interface MenuItem {
 
 interface MenuBarProps {
   menus: MenuItem[];
+  logo?: string;
 }
 
-export function MenuBar({ menus }: MenuBarProps) {
+export function MenuBar({ menus, logo }: MenuBarProps) {
   const [activeMenu, setActiveMenu] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -27,6 +28,7 @@ export function MenuBar({ menus }: MenuBarProps) {
 
   return (
     <div className="h-8 bg-[#3c3c3c] flex items-center px-2 text-xs select-none" ref={menuRef}>
+      {logo && <img src={logo} alt="Logo" className="h-5 w-5 mr-3 ml-1" />}
       {menus.map((menu, index) => (
         <div key={index} className="relative">
           <div

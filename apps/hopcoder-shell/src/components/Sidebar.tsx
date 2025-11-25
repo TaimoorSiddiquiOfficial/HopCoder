@@ -1,7 +1,7 @@
-import React from 'react';
-import { Folder, FileCode, File } from 'lucide-react';
+import React, { useState } from 'react';
+import { Folder, FolderOpen, FileCode, File, ChevronRight, ChevronDown, Loader2 } from 'lucide-react';
 
-interface WorkspaceEntry {
+export interface WorkspaceEntry {
   path: string;
   kind: 'file' | 'dir';
 }
@@ -9,40 +9,132 @@ interface WorkspaceEntry {
 interface SidebarProps {
   entries: WorkspaceEntry[];
   onFileSelect: (path: string) => void;
+  onLoadChildren: (path: string) => Promise<WorkspaceEntry[]>;
   workspaceRoot: string;
   notes?: string;
   onSaveNotes?: (notes: string) => void;
   onNotesBlur?: () => void;
 }
 
-export function Sidebar({ entries, onFileSelect, workspaceRoot, notes, onSaveNotes, onNotesBlur }: SidebarProps) {
-  // Simple flat list for now, can be improved to tree later
-  // We'll strip the workspaceRoot from the path for display if possible
-  
+const FileTreeNode = ({ 
+  entry, 
+  depth, 
+  onSelect, 
+  onLoadChildren, 
+  workspaceRoot 
+}: { 
+  entry: WorkspaceEntry; 
+  depth: number; 
+  onSelect: (path: string) => void; 
+  onLoadChildren: (path: string) => Promise<WorkspaceEntry[]>;
+  workspaceRoot: string;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [children, setChildren] = useState<WorkspaceEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
+
   const getDisplayName = (path: string) => {
-    if (path.startsWith(workspaceRoot)) {
-      return path.slice(workspaceRoot.length).replace(/^[\\/]/, '');
-    }
-    return path;
+    // For root entries, we might want to show relative path, but for nested, just the basename
+    // Actually, for tree view, we always want basename
+    const parts = path.split(/[\\/]/);
+    return parts[parts.length - 1] || path;
   };
+
+  const handleToggle = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (entry.kind === 'file') {
+      onSelect(entry.path);
+      return;
+    }
+
+    if (!isOpen && !hasLoaded) {
+      setIsLoading(true);
+      try {
+        const items = await onLoadChildren(entry.path);
+        // Sort: directories first, then files
+        items.sort((a, b) => {
+          if (a.kind === b.kind) return a.path.localeCompare(b.path);
+          return a.kind === 'dir' ? -1 : 1;
+        });
+        setChildren(items);
+        setHasLoaded(true);
+      } catch (err) {
+        console.error("Failed to load children", err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    setIsOpen(!isOpen);
+  };
+
+  const paddingLeft = `${depth * 12 + 12}px`;
+
+  return (
+    <div>
+      <div
+        className={`flex items-center gap-1 py-1 hover:bg-[#2a2d2e] cursor-pointer text-sm select-none ${isOpen ? 'text-white' : 'text-gray-400'}`}
+        style={{ paddingLeft }}
+        onClick={handleToggle}
+      >
+        <span className="opacity-70 w-4 flex justify-center">
+          {entry.kind === 'dir' && (
+            isLoading ? <Loader2 size={12} className="animate-spin" /> :
+            isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />
+          )}
+        </span>
+        
+        {entry.kind === 'dir' ? (
+          isOpen ? <FolderOpen size={14} className="text-blue-400" /> : <Folder size={14} className="text-blue-400" />
+        ) : (
+          <FileCode size={14} className="text-yellow-400" />
+        )}
+        <span className="truncate">{getDisplayName(entry.path)}</span>
+      </div>
+      
+      {isOpen && (
+        <div>
+          {children.map(child => (
+            <FileTreeNode
+              key={child.path}
+              entry={child}
+              depth={depth + 1}
+              onSelect={onSelect}
+              onLoadChildren={onLoadChildren}
+              workspaceRoot={workspaceRoot}
+            />
+          ))}
+          {children.length === 0 && hasLoaded && (
+            <div style={{ paddingLeft: `${(depth + 1) * 12 + 28}px` }} className="text-xs text-gray-600 py-1 italic">
+              Empty
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export function Sidebar({ entries, onFileSelect, onLoadChildren, workspaceRoot, notes, onSaveNotes, onNotesBlur }: SidebarProps) {
+  // Sort root entries
+  const sortedEntries = [...entries].sort((a, b) => {
+    if (a.kind === b.kind) return a.path.localeCompare(b.path);
+    return a.kind === 'dir' ? -1 : 1;
+  });
 
   return (
     <div className="h-full bg-[#1e1e1e] text-gray-300 flex flex-col border-r border-[#333]">
       <div className="p-2 text-xs font-bold uppercase tracking-wider text-gray-500">Explorer</div>
       <div className="flex-1 overflow-y-auto">
-        {entries.map((entry) => (
-          <div
+        {sortedEntries.map((entry) => (
+          <FileTreeNode
             key={entry.path}
-            className="flex items-center gap-2 px-3 py-1 hover:bg-[#2a2d2e] cursor-pointer text-sm"
-            onClick={() => entry.kind === 'file' && onFileSelect(entry.path)}
-          >
-            {entry.kind === 'dir' ? (
-              <Folder size={14} className="text-blue-400" />
-            ) : (
-              <FileCode size={14} className="text-yellow-400" />
-            )}
-            <span className="truncate">{getDisplayName(entry.path)}</span>
-          </div>
+            entry={entry}
+            depth={0}
+            onSelect={onFileSelect}
+            onLoadChildren={onLoadChildren}
+            workspaceRoot={workspaceRoot}
+          />
         ))}
       </div>
       {onSaveNotes && (

@@ -1,8 +1,6 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
-import { HopIpcClient } from '@proto/ipc-client';
-import type { HopEvent, HopWorkspaceListResponse, HopFsReadResponse, WorkspaceEntry } from '@proto/ipc';
+import { useEffect, useState } from 'react';
+import type { HopEvent, HopWorkspaceListResponse, HopFsReadResponse } from '@proto/ipc';
 import fsTools from '@proto/tools/fs-tools.json';
-import { hopMemoryLoadProject, hopMemorySaveProject } from './lib/hopMemory';
 import { Layout } from './components/Layout';
 import { Sidebar } from './components/Sidebar';
 import { CodeEditor } from './components/Editor';
@@ -10,158 +8,119 @@ import { TerminalPanel } from './components/TerminalPanel';
 import { CommandPalette } from './components/CommandPalette';
 import { ChatPanel } from './components/ChatPanel';
 import { ShortcutsHelp } from './components/ShortcutsHelp';
+import { MenuBar, MenuItem } from './components/MenuBar';
 import { toolRegistry } from './ai/ToolRegistry';
 import { aiOrchestrator } from './ai/Orchestrator';
-
-const ipc = new HopIpcClient();
-
-// Simple debounce utility
-function debounce<T extends (...args: any[]) => void>(func: T, wait: number) {
-  let timeout: NodeJS.Timeout;
-  return (...args: Parameters<T>) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
-}
-
-
-// Tool Implementations
-const toolImpls: Record<string, (args: any) => Promise<any>> = {
-  'fs.read': async ({ path }) => {
-    const res = await ipc.send<HopFsReadResponse>({ type: 'fs.read', path });
-    if (!res.ok) throw new Error(res.error);
-    return res.content;
-  },
-  'fs.write': async ({ path, content }) => {
-    const res = await ipc.send({ type: 'fs.write', path, content });
-    if (!res.ok) throw new Error(res.error);
-    return 'Success';
-  },
-  'fs.list': async ({ path }) => {
-    const res = await ipc.send<HopWorkspaceListResponse>({ type: 'workspace.list', root: path });
-    if (!res.ok) throw new Error(res.error);
-    return res.entries;
-  }
-};
-
-// Register FS tools from manifest
-fsTools.tools.forEach((t) => {
-  if (toolImpls[t.name]) {
-    toolRegistry.register({
-      name: t.name,
-      description: t.description,
-      parameters: t.input_schema,
-      execute: toolImpls[t.name],
-    });
-  }
-});
-
-// Register Terminal tool manually
-toolRegistry.register({
-  name: 'terminal_run',
-  description: 'Run a command in the terminal',
-  parameters: { type: 'object', properties: { command: { type: 'string' } } },
-  execute: async ({ command }) => {
-    await ipc.send({ type: 'terminal.write', id: 'default', data: command + '\n' });
-    return 'Command sent to terminal';
-  }
-});
+import { ipc } from './lib/ipc';
+import { useHopWorkspace } from './hooks/useHopWorkspace';
+import { useEditor } from './hooks/useEditor';
+import { useTerminal } from './hooks/useTerminal';
+import logoFull from './assets/logo-full.svg';
+import logoIcon from './assets/logo-icon.svg';
 
 function App() {
-  const [workspaceRoot, setWorkspaceRoot] = useState<string>('');
-  const [entries, setEntries] = useState<WorkspaceEntry[]>([]);
-  const [terminalOutput, setTerminalOutput] = useState<string>('');
-  const [activeFile, setActiveFile] = useState<string | null>(null);
-  const [fileContent, setFileContent] = useState<string>('');
-  const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
+  const {
+    workspaceRoot,
+    setWorkspaceRoot,
+    entries,
+    isWorkspaceOpen,
+    setIsWorkspaceOpen,
+    projectNotes,
+    openWorkspace,
+    handleNotesChange,
+    handleNotesBlur,
+    listDir
+  } = useHopWorkspace();
+
+  const {
+    tabs,
+    activeFilePath,
+    openFile,
+    closeFile,
+    closeOtherFiles,
+    setActiveFilePath,
+    updateFileContent,
+    saveFile
+  } = useEditor(workspaceRoot);
+
+  const {
+    terminals,
+    activeTerminalId,
+    setActiveTerminalId,
+    createTerminal,
+    closeTerminal,
+    writeToTerminal
+  } = useTerminal();
+
   const [isCmdPaletteOpen, setIsCmdPaletteOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
-  const [projectNotes, setProjectNotes] = useState('');
 
-  // Debounced save function
-  const debouncedSaveNotes = useCallback(
-    debounce((root: string, notes: string) => {
-      hopMemorySaveProject(root, 'project_notes', notes).catch(console.error);
-    }, 500),
-    []
-  );
-
+  // Register tools with current workspace root context
   useEffect(() => {
-    const subscribe = async () =>
-
-      ipc.onEvent((evt: HopEvent) => {
-        if (evt.type === 'terminal.data') {
-          setTerminalOutput((v) => v + evt.data);
-        }
-      });
-    subscribe();
-    
-    // Auto-spawn terminal on load
-    ipc.send({ type: 'terminal.spawn', id: 'default' }).catch(console.error);
-  }, []);
-
-  const openWorkspace = async (root: string) => {
-    const resp = await ipc.send<HopWorkspaceListResponse>({ type: 'workspace.list', root });
-    if (resp.ok && resp.entries) {
-      // Load project notes FIRST to avoid overwriting with empty state
-      let loadedNotes = '';
-      try {
-        const items = await hopMemoryLoadProject(root);
-        const noteItem = items.find(i => i.key === 'project_notes');
-        if (noteItem) {
-          loadedNotes = JSON.parse(noteItem.valueJson);
-        }
-      } catch (e) {
-        console.error('Failed to load notes', e);
+    const toolImpls: Record<string, (args: any) => Promise<any>> = {
+      'fs.read': async ({ path }) => {
+        const res = await ipc.send<HopFsReadResponse>({ 
+          type: 'fs.read', 
+          path, 
+          root: workspaceRoot || undefined 
+        });
+        if (!res.ok) throw new Error(res.error);
+        return res.content;
+      },
+      'fs.write': async ({ path, content }) => {
+        const res = await ipc.send({ 
+          type: 'fs.write', 
+          path, 
+          content, 
+          root: workspaceRoot || undefined 
+        });
+        if (!res.ok) throw new Error(res.error);
+        return 'Success';
+      },
+      'fs.list': async ({ path }) => {
+        const target = path || workspaceRoot;
+        const res = await ipc.send<HopWorkspaceListResponse>({ type: 'workspace.list', root: target });
+        if (!res.ok) throw new Error(res.error);
+        return res.entries;
       }
+    };
 
-      setProjectNotes(loadedNotes);
-      setWorkspaceRoot(root);
-      setEntries(resp.entries);
-      setIsWorkspaceOpen(true);
-      ipc.send({ type: 'workspace.open', root });
-    } else {
-      console.error('Failed to open workspace:', resp.error);
-    }
-  };
+    fsTools.tools.forEach((t) => {
+      if (toolImpls[t.name]) {
+        toolRegistry.register({
+          name: t.name,
+          description: t.description,
+          parameters: t.input_schema,
+          execute: toolImpls[t.name],
+        });
+      }
+    });
 
-  const handleNotesChange = (notes: string) => {
-    setProjectNotes(notes);
-    if (workspaceRoot) {
-      debouncedSaveNotes(workspaceRoot, notes);
-    }
-  };
+    // Register Terminal tool manually
+    toolRegistry.register({
+      name: 'terminal_run',
+      description: 'Run a command in the terminal',
+      parameters: { type: 'object', properties: { command: { type: 'string' } } },
+      execute: async ({ command }) => {
+        await ipc.send({ type: 'terminal.write', id: 'default', data: command + '\n' });
+        return 'Command sent to terminal';
+      }
+    });
+  }, [workspaceRoot]);
 
-  const handleNotesBlur = () => {
-    if (workspaceRoot) {
-      hopMemorySaveProject(workspaceRoot, 'project_notes', projectNotes).catch(console.error);
+  // Auto-spawn first terminal
+  useEffect(() => {
+    if (terminals.length === 0) {
+      createTerminal();
     }
-  };
-
-  const handleFileSelect = async (path: string) => {
-    setActiveFile(path);
-    const resp = await ipc.send<HopFsReadResponse>({ type: 'fs.read', path });
-    if (resp.ok && resp.content !== undefined) {
-      setFileContent(resp.content);
-    } else {
-      setFileContent('// Error reading file');
-    }
-  };
-
-  const handleSave = async () => {
-    if (activeFile) {
-      await ipc.send({ type: 'fs.write', path: activeFile, content: fileContent });
-      // Optional: Show toast or status update
-      console.log('Saved', activeFile);
-    }
-  };
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        handleSave();
+        saveFile();
       }
       if (((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'p') || e.key === 'F1') {
         e.preventDefault();
@@ -170,17 +129,12 @@ function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeFile, fileContent]);
-
-  const handleTerminalInput = (data: string) => {
-    ipc.send({ type: 'terminal.write', id: 'default', data });
-  };
+  }, [activeFilePath, tabs, saveFile]);
 
   const commands = [
-    { id: 'save', label: 'File: Save', action: handleSave, shortcut: 'Ctrl+S' },
+    { id: 'save', label: 'File: Save', action: () => saveFile(), shortcut: 'Ctrl+S' },
     { id: 'open', label: 'File: Open Workspace...', action: () => setIsWorkspaceOpen(false) },
     { id: 'reload', label: 'Window: Reload', action: () => window.location.reload() },
-    { id: 'term.clear', label: 'Terminal: Clear', action: () => setTerminalOutput('') },
     { id: 'view.chat', label: 'View: Toggle Chat', action: () => setIsChatOpen(v => !v) },
     { id: 'help.shortcuts', label: 'Help: Keyboard Shortcuts', action: () => setIsShortcutsOpen(true) },
     { 
@@ -198,12 +152,70 @@ function App() {
     },
   ];
 
+  const menuItems: MenuItem[] = [
+    {
+      label: 'File',
+      children: [
+        { label: 'New File', action: () => alert('Not implemented') },
+        { label: 'Open Workspace...', action: () => setIsWorkspaceOpen(false) },
+        { label: 'Save', action: () => saveFile(), shortcut: 'Ctrl+S' },
+        { label: 'Close Tab', action: () => activeFilePath && closeFile(activeFilePath), shortcut: 'Ctrl+W' },
+        { label: 'Close Other Tabs', action: () => activeFilePath && closeOtherFiles(activeFilePath) },
+        { label: 'Exit', action: () => window.close() },
+      ]
+    },
+    {
+      label: 'Edit',
+      children: [
+        { label: 'Undo', shortcut: 'Ctrl+Z' },
+        { label: 'Redo', shortcut: 'Ctrl+Y' },
+        { label: 'Cut', shortcut: 'Ctrl+X' },
+        { label: 'Copy', shortcut: 'Ctrl+C' },
+        { label: 'Paste', shortcut: 'Ctrl+V' },
+      ]
+    },
+    {
+      label: 'View',
+      children: [
+        { label: 'Command Palette', action: () => setIsCmdPaletteOpen(true), shortcut: 'Ctrl+Shift+P' },
+        { label: 'Toggle Chat', action: () => setIsChatOpen(v => !v) },
+        { label: 'Toggle Terminal', action: () => {} }, // TODO
+      ]
+    },
+    {
+      label: 'Go',
+      children: [
+        { label: 'Go to File...', shortcut: 'Ctrl+P' },
+      ]
+    },
+    {
+      label: 'Run',
+      children: [
+        { label: 'Run Task...' },
+      ]
+    },
+    {
+      label: 'Terminal',
+      children: [
+        { label: 'New Terminal', action: createTerminal },
+        { label: 'Kill Terminal', action: () => activeTerminalId && closeTerminal(activeTerminalId) },
+      ]
+    },
+    {
+      label: 'Help',
+      children: [
+        { label: 'Keyboard Shortcuts', action: () => setIsShortcutsOpen(true) },
+        { label: 'About' },
+      ]
+    }
+  ];
+
 
   // Simple "Welcome / Open" screen if no workspace
   if (!isWorkspaceOpen) {
     return (
       <div className="h-screen w-screen bg-[#1e1e1e] text-white flex flex-col items-center justify-center">
-        <h1 className="text-4xl font-bold mb-8 text-blue-400">HopCoder</h1>
+        <img src={logoFull} alt="HopCoder" className="h-24 mb-8" />
         <div className="flex gap-2">
           <input
             className="bg-[#252526] border border-[#333] px-4 py-2 rounded text-white w-64 outline-none focus:border-blue-500"
@@ -224,45 +236,45 @@ function App() {
     );
   }
 
-  const getLanguageFromPath = (path: string | null) => {
-    if (!path) return 'typescript';
-    if (path.endsWith('.rs')) return 'rust';
-    if (path.endsWith('.ts') || path.endsWith('.tsx')) return 'typescript';
-    if (path.endsWith('.js') || path.endsWith('.jsx')) return 'javascript';
-    if (path.endsWith('.json')) return 'json';
-    return 'plaintext';
-  };
-
   return (
-    <>
-      <Layout
-        sidebar={
-          <Sidebar
-            entries={entries}
-            onFileSelect={handleFileSelect}
-            workspaceRoot={workspaceRoot}
-            notes={projectNotes}
-            onSaveNotes={handleNotesChange}
-            onNotesBlur={handleNotesBlur}
-          />
-        }
-        editor={
-          <CodeEditor
-            content={fileContent}
-            path={activeFile || undefined}
-            rootPath={workspaceRoot}
-            language={getLanguageFromPath(activeFile)}
-            onChange={(val) => setFileContent(val || '')}
-          />
-        }
-        bottomPanel={
-          <TerminalPanel
-            output={terminalOutput}
-            onInput={handleTerminalInput}
-          />
-        }
-        rightPanel={isChatOpen ? <ChatPanel /> : undefined}
-      />
+    <div className="h-screen flex flex-col overflow-hidden">
+      <MenuBar menus={menuItems} logo={logoIcon} />
+      <div className="flex-1 overflow-hidden">
+        <Layout
+          sidebar={
+            <Sidebar
+              entries={entries}
+              onFileSelect={openFile}
+              onLoadChildren={listDir}
+              workspaceRoot={workspaceRoot}
+              notes={projectNotes}
+              onSaveNotes={handleNotesChange}
+              onNotesBlur={handleNotesBlur}
+            />
+          }
+          editor={
+            <CodeEditor
+              tabs={tabs}
+              activeFilePath={activeFilePath}
+              rootPath={workspaceRoot}
+              onTabClick={setActiveFilePath}
+              onTabClose={closeFile}
+              onContentChange={updateFileContent}
+            />
+          }
+          bottomPanel={
+            <TerminalPanel
+              terminals={terminals}
+              activeTerminalId={activeTerminalId}
+              onSetActive={setActiveTerminalId}
+              onCreate={createTerminal}
+              onClose={closeTerminal}
+              onInput={writeToTerminal}
+            />
+          }
+          rightPanel={isChatOpen ? <ChatPanel /> : undefined}
+        />
+      </div>
       <CommandPalette
         isOpen={isCmdPaletteOpen}
         onClose={() => setIsCmdPaletteOpen(false)}
@@ -272,7 +284,7 @@ function App() {
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
       />
-    </>
+    </div>
   );
 }
 

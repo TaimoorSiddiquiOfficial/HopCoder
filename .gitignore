@@ -1,0 +1,17 @@
+# Node
+node_modules
+dist
+build
+
+# Rust
+target
+**/*.rs.bk
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode
+.idea
+*.swp
