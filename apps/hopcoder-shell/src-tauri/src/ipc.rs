@@ -43,6 +43,8 @@ pub enum HopRequest {
     FsWrite { path: String, content: String, root: Option<String> },
     #[serde(rename = "fs.delete")]
     FsDelete { path: String, root: Option<String> },
+    #[serde(rename = "fs.search")]
+    FsSearch { query: String, root: Option<String> },
     #[serde(rename = "workspace.open")]
     WorkspaceOpen { root: String },
     #[serde(rename = "workspace.list")]
@@ -68,6 +70,8 @@ pub enum HopResponse {
     FsWrite { ok: bool, error: Option<String> },
     #[serde(rename = "fs.delete")]
     FsDelete { ok: bool, error: Option<String> },
+    #[serde(rename = "fs.search")]
+    FsSearch { ok: bool, matches: Option<Vec<String>>, error: Option<String> },
     #[serde(rename = "workspace.open")]
     WorkspaceOpen { ok: bool, #[serde(rename = "workspaceRoot")] workspace_root: Option<String>, error: Option<String> },
     #[serde(rename = "workspace.list")]

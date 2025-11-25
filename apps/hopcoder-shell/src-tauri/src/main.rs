@@ -34,6 +34,7 @@ async fn hop_ipc(
         HopRequest::FsRead { path, root } => fs_handlers::read(&path, root.as_deref()).await,
         HopRequest::FsWrite { path, content, root } => fs_handlers::write(&path, content, root.as_deref()).await,
         HopRequest::FsDelete { path, root } => fs_handlers::delete(&path, root.as_deref()).await,
+        HopRequest::FsSearch { query, root } => fs_handlers::search(&query, root.as_deref()).await,
         HopRequest::WorkspaceOpen { root } => workspace::open(&root).await,
         HopRequest::WorkspaceList { root } => workspace::list(&root).await,
         HopRequest::TerminalSpawn { id, shell } => {

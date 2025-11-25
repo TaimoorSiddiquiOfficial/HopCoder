@@ -14,6 +14,7 @@ function debounce<T extends (...args: any[]) => void>(func: T, wait: number) {
 
 export function useHopWorkspace() {
   const [workspaceRoot, setWorkspaceRoot] = useState<string>('');
+  const [workspaceFolders, setWorkspaceFolders] = useState<string[]>([]);
   const [entries, setEntries] = useState<WorkspaceEntry[]>([]);
   const [isWorkspaceOpen, setIsWorkspaceOpen] = useState(false);
   const [projectNotes, setProjectNotes] = useState('');
@@ -26,29 +27,63 @@ export function useHopWorkspace() {
     []
   );
 
-  const openWorkspace = async (root: string) => {
+  const loadWorkspaceFolder = async (root: string): Promise<WorkspaceEntry[]> => {
     const resp = await ipc.send<HopWorkspaceListResponse>({ type: 'workspace.list', root });
     if (resp.ok && resp.entries) {
-      // Load project notes FIRST to avoid overwriting with empty state
-      let loadedNotes = '';
-      try {
-        const items = await hopMemoryLoadProject(root);
-        const noteItem = items.find(i => i.key === 'project_notes');
-        if (noteItem) {
-          loadedNotes = JSON.parse(noteItem.valueJson);
-        }
-      } catch (e) {
-        console.error('Failed to load notes', e);
-      }
-
-      setProjectNotes(loadedNotes);
-      setWorkspaceRoot(root);
-      setEntries(resp.entries);
-      setIsWorkspaceOpen(true);
-      ipc.send({ type: 'workspace.open', root });
-    } else {
-      console.error('Failed to open workspace:', resp.error);
+      return resp.entries;
     }
+    return [];
+  };
+
+  const openWorkspace = async (root: string) => {
+    // Check if it's a .code-workspace file
+    if (root.endsWith('.code-workspace')) {
+      // TODO: Parse .code-workspace file
+      // For now, just treat the parent dir as root
+      // const content = await ipc.send({ type: 'fs.read', path: root });
+    }
+
+    const folderEntries = await loadWorkspaceFolder(root);
+    
+    // Load project notes FIRST to avoid overwriting with empty state
+    let loadedNotes = '';
+    try {
+      const items = await hopMemoryLoadProject(root);
+      const noteItem = items.find(i => i.key === 'project_notes');
+      if (noteItem) {
+        loadedNotes = JSON.parse(noteItem.valueJson);
+      }
+    } catch (e) {
+      console.error('Failed to load notes', e);
+    }
+
+    setProjectNotes(loadedNotes);
+    setWorkspaceRoot(root);
+    setWorkspaceFolders([root]);
+    setEntries(folderEntries);
+    setIsWorkspaceOpen(true);
+    ipc.send({ type: 'workspace.open', root });
+  };
+
+  const addWorkspaceFolder = async (path: string) => {
+    if (workspaceFolders.includes(path)) return;
+    
+    const newEntries = await loadWorkspaceFolder(path);
+    // If we already have multiple folders, we might need a better structure
+    // For now, let's just append to entries, but this is tricky for the tree view
+    // Ideally, we should switch to a multi-root structure in the Sidebar
+    
+    setWorkspaceFolders(prev => [...prev, path]);
+    // Re-fetching all might be needed or just appending
+    // But Sidebar expects a flat list of top-level items
+    // If we have multiple roots, we should probably wrap them in "Folder" entries
+    
+    const rootEntry: WorkspaceEntry = {
+      path: path,
+      kind: 'dir'
+    };
+    
+    setEntries(prev => [...prev, rootEntry]);
   };
 
   const handleNotesChange = (notes: string) => {
@@ -82,6 +117,8 @@ export function useHopWorkspace() {
     openWorkspace,
     handleNotesChange,
     handleNotesBlur,
-    listDir
+    listDir,
+    addWorkspaceFolder,
+    workspaceFolders
   };
 }

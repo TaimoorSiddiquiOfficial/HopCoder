@@ -8,10 +8,12 @@ import { TerminalPanel } from './components/TerminalPanel';
 import { CommandPalette } from './components/CommandPalette';
 import { ChatPanel } from './components/ChatPanel';
 import { ShortcutsHelp } from './components/ShortcutsHelp';
+import { FileSearch } from './components/FileSearch';
 import { MenuBar, MenuItem } from './components/MenuBar';
 import { toolRegistry } from './ai/ToolRegistry';
 import { aiOrchestrator } from './ai/Orchestrator';
 import { ipc } from './lib/ipc';
+import { hopMemoryLoadProject, hopMemorySaveProject } from './lib/hopMemory';
 import { useHopWorkspace } from './hooks/useHopWorkspace';
 import { useEditor } from './hooks/useEditor';
 import { useTerminal } from './hooks/useTerminal';
@@ -29,7 +31,8 @@ function App() {
     openWorkspace,
     handleNotesChange,
     handleNotesBlur,
-    listDir
+    listDir,
+    addWorkspaceFolder
   } = useHopWorkspace();
 
   const {
@@ -53,6 +56,7 @@ function App() {
   } = useTerminal();
 
   const [isCmdPaletteOpen, setIsCmdPaletteOpen] = useState(false);
+  const [isFileSearchOpen, setIsFileSearchOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
 
@@ -83,6 +87,20 @@ function App() {
         const res = await ipc.send<HopWorkspaceListResponse>({ type: 'workspace.list', root: target });
         if (!res.ok) throw new Error(res.error);
         return res.entries;
+      },
+      'fs.search': async ({ query }) => {
+        const res = await ipc.send<any>({ type: 'fs.search', query, root: workspaceRoot || undefined });
+        if (!res.ok) throw new Error(res.error);
+        return res.matches;
+      },
+      'hop.memory.save': async ({ key, value }) => {
+        if (!workspaceRoot) throw new Error('No workspace open');
+        await hopMemorySaveProject(workspaceRoot, key, value);
+        return 'Saved';
+      },
+      'hop.memory.load_project': async () => {
+        if (!workspaceRoot) throw new Error('No workspace open');
+        return await hopMemoryLoadProject(workspaceRoot);
       }
     };
 
@@ -107,6 +125,28 @@ function App() {
         return 'Command sent to terminal';
       }
     });
+
+    // Register Memory tools manually (since they are not in fs-tools.json yet)
+    toolRegistry.register({
+      name: 'hop.memory.save',
+      description: 'Save a key-value pair to project memory',
+      parameters: { 
+        type: 'object', 
+        required: ['key', 'value'],
+        properties: { 
+          key: { type: 'string' }, 
+          value: { type: 'string' } 
+        } 
+      },
+      execute: toolImpls['hop.memory.save']
+    });
+
+    toolRegistry.register({
+      name: 'hop.memory.load_project',
+      description: 'Load all project memory',
+      parameters: { type: 'object', properties: {} },
+      execute: toolImpls['hop.memory.load_project']
+    });
   }, [workspaceRoot]);
 
   // Auto-spawn first terminal
@@ -125,6 +165,9 @@ function App() {
       if (((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'p') || e.key === 'F1') {
         e.preventDefault();
         setIsCmdPaletteOpen(true);
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+        e.preventDefault();
+        setIsFileSearchOpen(true);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -134,6 +177,11 @@ function App() {
   const commands = [
     { id: 'save', label: 'File: Save', action: () => saveFile(), shortcut: 'Ctrl+S' },
     { id: 'open', label: 'File: Open Workspace...', action: () => setIsWorkspaceOpen(false) },
+    { id: 'add_folder', label: 'File: Add Folder to Workspace...', action: () => {
+      const path = window.prompt('Enter folder path:');
+      if (path) addWorkspaceFolder(path);
+    }},
+    { id: 'search_files', label: 'Go to File...', action: () => setIsFileSearchOpen(true), shortcut: 'Ctrl+P' },
     { id: 'reload', label: 'Window: Reload', action: () => window.location.reload() },
     { id: 'view.chat', label: 'View: Toggle Chat', action: () => setIsChatOpen(v => !v) },
     { id: 'help.shortcuts', label: 'Help: Keyboard Shortcuts', action: () => setIsShortcutsOpen(true) },
@@ -143,6 +191,18 @@ function App() {
       action: () => {
         const key = window.prompt('Enter OpenAI API Key:');
         if (key) aiOrchestrator.setApiKey(key);
+      } 
+    },
+    { 
+      id: 'ai.azure', 
+      label: 'AI: Set Azure Agent', 
+      action: () => {
+        const defaultEndpoint = import.meta.env.VITE_AZURE_PROJECT_ENDPOINT 
+          ? `${import.meta.env.VITE_AZURE_PROJECT_ENDPOINT}/applications/${import.meta.env.VITE_AZURE_AGENT_NAME || 'HopCoder'}/protocols/openai/responses?api-version=${import.meta.env.VITE_AZURE_API_VERSION || '2025-11-15-preview'}`
+          : '';
+        const endpoint = window.prompt('Enter Azure Agent Endpoint (openai/responses):', defaultEndpoint);
+        const key = window.prompt('Enter Azure API Key:');
+        if (endpoint && key) aiOrchestrator.setAzureAgent(endpoint, key);
       } 
     },
     { 
@@ -158,6 +218,10 @@ function App() {
       children: [
         { label: 'New File', action: () => alert('Not implemented') },
         { label: 'Open Workspace...', action: () => setIsWorkspaceOpen(false) },
+        { label: 'Add Folder to Workspace...', action: () => {
+          const path = window.prompt('Enter folder path:');
+          if (path) addWorkspaceFolder(path);
+        }},
         { label: 'Save', action: () => saveFile(), shortcut: 'Ctrl+S' },
         { label: 'Close Tab', action: () => activeFilePath && closeFile(activeFilePath), shortcut: 'Ctrl+W' },
         { label: 'Close Other Tabs', action: () => activeFilePath && closeOtherFiles(activeFilePath) },
@@ -185,7 +249,7 @@ function App() {
     {
       label: 'Go',
       children: [
-        { label: 'Go to File...', shortcut: 'Ctrl+P' },
+        { label: 'Go to File...', action: () => setIsFileSearchOpen(true), shortcut: 'Ctrl+P' },
       ]
     },
     {
@@ -279,6 +343,12 @@ function App() {
         isOpen={isCmdPaletteOpen}
         onClose={() => setIsCmdPaletteOpen(false)}
         commands={commands}
+      />
+      <FileSearch
+        isOpen={isFileSearchOpen}
+        onClose={() => setIsFileSearchOpen(false)}
+        onFileSelect={openFile}
+        workspaceRoot={workspaceRoot}
       />
       <ShortcutsHelp
         isOpen={isShortcutsOpen}

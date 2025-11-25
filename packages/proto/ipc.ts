@@ -46,6 +46,7 @@ export type HopRequest =
   | HopFsReadRequest
   | HopFsWriteRequest
   | HopFsDeleteRequest
+  | HopFsSearchRequest
   | HopWorkspaceOpenRequest
   | HopWorkspaceListRequest
   | HopTerminalSpawnRequest
@@ -70,6 +71,12 @@ export interface HopFsWriteRequest {
 export interface HopFsDeleteRequest {
   type: 'fs.delete';
   path: string;
+  root?: string;
+}
+
+export interface HopFsSearchRequest {
+  type: 'fs.search';
+  query: string;
   root?: string;
 }
 
@@ -129,6 +136,8 @@ export interface HopLspRequest {
 export type HopResponse =
   | HopFsReadResponse
   | HopFsWriteResponse
+  | HopFsDeleteResponse
+  | HopFsSearchResponse
   | HopWorkspaceOpenResponse
   | HopWorkspaceListResponse
   | HopTerminalSpawnResponse
@@ -162,6 +171,13 @@ export interface HopFsWriteResponse extends HopBaseResponse {
 export interface HopFsDeleteResponse extends HopBaseResponse {
   type: 'fs.delete';
   ok: boolean;
+  error?: string;
+}
+
+export interface HopFsSearchResponse extends HopBaseResponse {
+  type: 'fs.search';
+  ok: boolean;
+  matches?: string[];
   error?: string;
 }
 
