@@ -1,0 +1,253 @@
+{
+  "tools": [
+    {
+      "name": "fs.read",
+      "description": "Read a UTF-8 text file from the current workspace (project root-relative).",
+      "input_schema": {
+        "type": "object",
+        "required": ["path"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path relative to the workspace root, e.g. 'src/main.rs'."
+          },
+          "max_bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional soft limit; content will be truncated if the file exceeds this many bytes."
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["ok"],
+        "properties": {
+          "ok": { "type": "boolean" },
+          "content": {
+            "type": "string",
+            "description": "UTF-8 text content. May be truncated if max_bytes was exceeded."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True if content was truncated due to max_bytes."
+          },
+          "error": {
+            "type": "string",
+            "description": "Present when ok is false; describes why the read failed."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fs.write",
+      "description": "Write UTF-8 text content to a file in the current workspace (project root-relative).",
+      "input_schema": {
+        "type": "object",
+        "required": ["path", "content"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path relative to the workspace root, e.g. 'src/main.rs'."
+          },
+          "content": {
+            "type": "string",
+            "description": "UTF-8 text to write."
+          },
+          "create_if_missing": {
+            "type": "boolean",
+            "default": true,
+            "description": "If true, create the file and any intermediate directories if they do not exist."
+          },
+          "append": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, append to the file instead of replacing its contents."
+          },
+          "overwrite": {
+            "type": "boolean",
+            "default": true,
+            "description": "If false and the file already exists (and append is false), the call should fail."
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["ok"],
+        "properties": {
+          "ok": { "type": "boolean" },
+          "bytes_written": {
+            "type": "integer",
+            "description": "Number of bytes actually written."
+          },
+          "error": {
+            "type": "string",
+            "description": "Present when ok is false; describes why the write failed."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fs.list",
+      "description": "List files and folders under a workspace-relative directory.",
+      "input_schema": {
+        "type": "object",
+        "required": ["path"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Directory path relative to the workspace root, e.g. 'src'. Use '.' for the root."
+          },
+          "recursive": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, recursively list subdirectories."
+          },
+          "max_entries": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional limit on the number of entries returned."
+          },
+          "include_hidden": {
+            "type": "boolean",
+            "default": false,
+            "description": "If true, include dotfiles and other hidden entries."
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["ok", "entries"],
+        "properties": {
+          "ok": { "type": "boolean" },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["path", "name", "type"],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Workspace-relative path to this entry."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Base name of the file or directory."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["file", "dir", "symlink"],
+                  "description": "Entry type."
+                },
+                "size": {
+                  "type": "integer",
+                  "description": "Size in bytes for files; 0 or null for directories."
+                },
+                "modified_ms": {
+                  "type": "integer",
+                  "description": "Last modified time as epoch milliseconds."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True if results were truncated due to max_entries."
+          },
+          "error": {
+            "type": "string",
+            "description": "Present when ok is false; describes the failure."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "fs.search",
+      "description": "Search for a text query in UTF-8 files under a workspace-relative directory.",
+      "input_schema": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Plain-text search string (not regex) to find in files."
+          },
+          "path": {
+            "type": "string",
+            "default": ".",
+            "description": "Directory path relative to the workspace root to search in; defaults to root."
+          },
+          "max_results": {
+            "type": "integer",
+            "minimum": 1,
+            "default": 100,
+            "description": "Maximum number of matches to return."
+          },
+          "case_sensitive": {
+            "type": "boolean",
+            "default": false
+          },
+          "include_globs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Optional list of glob patterns (e.g. '**/*.ts') to include."
+          },
+          "exclude_globs": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Optional list of glob patterns to exclude (e.g. 'node_modules/**')."
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["ok", "matches"],
+        "properties": {
+          "ok": { "type": "boolean" },
+          "matches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["path", "line", "column", "preview"],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Workspace-relative path to the file containing the match."
+                },
+                "line": {
+                  "type": "integer",
+                  "description": "0-based line index of the match."
+                },
+                "column": {
+                  "type": "integer",
+                  "description": "0-based character index within the line."
+                },
+                "preview": {
+                  "type": "string",
+                  "description": "A short snippet of the line around the match."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True if there were more matches than max_results."
+          },
+          "error": {
+            "type": "string",
+            "description": "Present when ok is false; describes the failure."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}
